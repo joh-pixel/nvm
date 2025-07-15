@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IP Tracer</title>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+  <script src="https://www.google.com/recaptcha/api.js" async defer></script>
+  <style>
+    :root {
+      --bg-color: #0d1117;
+      --text-color: #c9d1d9;
+      --card-color: #161b22;
+      --input-bg: #21262d;
+      --button-bg: #238636;
+      --button-hover: #2ea043;
+    }[data-theme="light"] {
+  --bg-color: #ffffff;
+  --text-color: #000000;
+  --card-color: #f0f0f0;
+  --input-bg: #e0e0e0;
+  --button-bg: #007bff;
+  --button-hover: #0056b3;
+}
+
+body {
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  font-family: Arial, sans-serif;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+  min-height: 100vh;
+  margin: 0;
+  padding-bottom: 50px;
+  transition: background 0.3s, color 0.3s;
+}
+
+.container {
+  background: var(--card-color);
+  padding: 30px;
+  border-radius: 15px;
+  box-shadow: 0 0 15px #58a6ff;
+  width: 80%;
+  max-width: 500px;
+  text-align: center;
+  position: relative;
+}
+
+input, button {
+  padding: 10px;
+  margin: 10px 0;
+  width: 80%;
+  border: none;
+  border-radius: 8px;
+}
+
+input {
+  background: var(--input-bg);
+  color: var(--text-color);
+}
+
+button {
+  background: var(--button-bg);
+  color: white;
+  cursor: pointer;
+}
+
+button:hover {
+  background: var(--button-hover);
+}
+
+#result, #history, #userDashboard {
+  margin-top: 20px;
+  background: var(--input-bg);
+  padding: 15px;
+  border-radius: 10px;
+  text-align: left;
+}
+
+#map {
+  margin-top: 15px;
+  width: 100%;
+  height: 300px;
+  border-radius: 10px;
+}
+
+#themeToggle {
+  position: absolute;
+  top: 20px;
+  right: 60px;
+  font-size: 24px;
+  cursor: pointer;
+}
+
+.menuToggle {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  font-size: 24px;
+  cursor: pointer;
+  z-index: 2;
+}
+
+.menuContent {
+  display: none;
+  position: absolute;
+  top: 60px;
+  right: 20px;
+  background: var(--card-color);
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0 0 10px #000;
+  width: 300px;
+  z-index: 3;
+  opacity: 0;
+  transform: translateY(-20px);
+  transition: all 0.3s ease;
+}
+
+.menuContent.active {
+  display: block;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+footer {
+  margin-top: 40px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--text-color);
+}
+
+a.learn-link {
+  color: #58a6ff;
+  text-decoration: underline;
+  display: block;
+  margin-top: 10px;
+}
+
+.user-info {
+  margin-bottom: 10px;
+  font-size: 14px;
+  color: var(--text-color);
+}
+
+  </style>
+</head>
+<body>
+  <div class="menuToggle" onclick="toggleMenu()">☰</div>
+  <div id="themeToggle">🌙</div>
+  <div class="menuContent" id="menuContent">
+    <div class="user-info" id="userInfo"></div>
+    <div class="auth" id="loginForm">
+      <h3>Login</h3>
+      <input type="email" id="loginEmail" placeholder="Email">
+      <input type="password" id="loginPassword" placeholder="Password">
+      <button onclick="loginUser()">Login</button>
+      <button onclick="resetPassword()">Reset Password</button>
+      <button onclick="loginWithGoogle()">Sign in with Google</button>
+    </div>
+    <div class="signup" id="signupForm">
+      <h3>Sign Up</h3>
+      <input type="email" id="signupEmail" placeholder="Email">
+      <input type="password" id="signupPassword" placeholder="Password">
+      <div class="g-recaptcha" data-sitekey="6LcsGIMrAAAAAPSJoChm7Ibzoo-7WZla7ve_IUj1"></div>
+      <button onclick="signUpUser()">Create Account</button>
+    </div>
+    <button onclick="logoutUser()" id="logoutBtn" style="display:none; margin-top:10px;">Logout</button>
+  </div>  <div class="container">
+    <h1>🌍 IP Tracer</h1>
+    <a class="learn-link" href="learn.html" target="_blank">📘 Learn More About IP Tracking</a><input type="text" id="ipInput" placeholder="Enter IP or leave blank for your own" />
+<button onclick="traceIP()">Trace</button>
+<div id="result"></div>
+<div id="map"></div>
+<div id="userDashboard"></div>
+
+<footer>
+  &copy; 2025 IP Tracer. All rights reserved.
+</footer>
+  </div>
+  <script type="module">
+  // Import the functions you need from the SDKs you need
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
+  import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-analytics.js";
+  // TODO: Add SDKs for Firebase products that you want to use
+  // https://firebase.google.com/docs/web/setup#available-libraries
+
+  // Your web app's Firebase configuration
+  // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+  const firebaseConfig = {
+    apiKey: "AIzaSyBelDJZ996fJFhJfQS9wfJgBB_4NwDBnqM",
+    authDomain: "ip-tracer-862e0.firebaseapp.com",
+    projectId: "ip-tracer-862e0",
+    storageBucket: "ip-tracer-862e0.firebasestorage.app",
+    messagingSenderId: "866192265905",
+    appId: "1:866192265905:web:5bd8696f372b148ca9c890",
+    measurementId: "G-64L39R6B39"
+  };
+
+  // Initialize Firebase
+  const app = initializeApp(firebaseConfig);
+  const analytics = getAnalytics(app);
+</script>
+  <script>
+     function toggleMenu() {
+      const menu = document.getElementById("menuContent");
+      menu.classList.toggle("active");
+    }
+
+    function signUpUser() {
+      const email = document.getElementById("signupEmail").value;
+      const password = document.getElementById("signupPassword").value;
+      const response = grecaptcha.getResponse();
+      if (!response) return alert("Please verify you're not a robot.");
+
+      auth.createUserWithEmailAndPassword(email, password)
+        .then(() => alert("Account created successfully!"))
+        .catch(err => alert(err.message));
+    }
+
+    function loginUser() {
+      const email = document.getElementById("loginEmail").value;
+      const password = document.getElementById("loginPassword").value;
+
+      auth.signInWithEmailAndPassword(email, password)
+        .then(() => alert("Logged in!"))
+        .catch(err => alert(err.message));
+    }
+
+    function loginWithGoogle() {
+      const provider = new firebase.auth.GoogleAuthProvider();
+      auth.signInWithPopup(provider)
+        .then(result => alert(`Welcome, ${result.user.displayName || result.user.email}`))
+        .catch(err => alert(err.message));
+    }
+
+    function resetPassword() {
+      const email = document.getElementById("loginEmail").value;
+      if (!email) return alert("Enter your email to reset password.");
+      auth.sendPasswordResetEmail(email)
+        .then(() => alert("Password reset link sent!"))
+        .catch(err => alert(err.message));
+    }
+
+    function logoutUser() {
+      auth.signOut().then(() => {
+        alert("Logged out successfully.");
+        updateUserInfo(null);
+      });
+    }
+
+    auth.onAuthStateChanged(user => {
+      updateUserInfo(user);
+    });
+
+    function updateUserInfo(user) {
+      const userInfo = document.getElementById("userInfo");
+      const logoutBtn = document.getElementById("logoutBtn");
+      const loginForm = document.getElementById("loginForm");
+      const signupForm = document.getElementById("signupForm");
+      if (user) {
+        userInfo.textContent = `Signed in as: ${user.email}`;
+        logoutBtn.style.display = "block";
+        loginForm.style.display = "none";
+        signupForm.style.display = "none";
+        loadUserDashboard(user.uid);
+      } else {
+        userInfo.textContent = "";
+        logoutBtn.style.display = "none";
+        loginForm.style.display = "block";
+        signupForm.style.display = "block";
+        document.getElementById("userDashboard").innerHTML = "";
+      }
+    }
+
+    let map;
+    let marker;
+
+    function traceIP() {
+      const ip = document.getElementById('ipInput').value || '';
+      const url = `http://ip-api.com/json/${ip}`;
+
+      fetch(url)
+        .then(res => res.json())
+        .then(data => {
+          if (data.status === "success") {
+            document.getElementById('result').innerHTML = `
+              <strong>IP:</strong> ${data.query}<br/>
+              <strong>Country:</strong> ${data.country} (${data.countryCode})<br/>
+              <strong>Region:</strong> ${data.regionName}<br/>
+              <strong>City:</strong> ${data.city}<br/>
+              <strong>ZIP:</strong> ${data.zip}<br/>
+              <strong>ISP:</strong> ${data.isp}<br/>
+              <strong>Timezone:</strong> ${data.timezone}<br/>
+              <strong>Coordinates:</strong> ${data.lat}, ${data.lon}<br/>
+              <a href="https://www.google.com/maps?q=${data.lat},${data.lon}" target="_blank">🌐 View on Map</a>
+            `;
+
+            showMap(data.lat, data.lon);
+
+            const user = auth.currentUser;
+            if (user) {
+              db.collection("users").doc(user.uid).collection("ips").add({
+                ip: data.query,
+                city: data.city,
+                country: data.country,
+                timestamp: new Date()
+              });
+            }
+          } else {
+            document.getElementById('result').innerText = `❌ Error: ${data.message}`;
+          }
+        })
+        .catch(() => {
+          document.getElementById('result').innerText = '⚠️ Network error';
+        });
+    }
+
+    function loadUserDashboard(uid) {
+      const dash = document.getElementById("userDashboard");
+      db.collection("users").doc(uid).collection("ips").orderBy("timestamp", "desc").limit(10)
+        .get()
+        .then(snapshot => {
+          let html = '<h3>Saved IPs</h3>';
+          snapshot.forEach(doc => {
+            const d = doc.data();
+            html += `<div><strong>${d.ip}</strong> - ${d.city}, ${d.country}</div>`;
+          });
+          dash.innerHTML = html;
+        });
+    }
+
+    function showMap(lat, lon) {
+      if (!map) {
+        map = new google.maps.Map(document.getElementById("map"), {
+          center: { lat, lng: lon },
+          zoom: 8,
+        });
+        marker = new google.maps.Marker({ position: { lat, lng: lon }, map: map });
+      } else {
+        map.setCenter({ lat, lng: lon });
+        marker.setPosition({ lat, lng: lon });
+      }
+    }
+
+    const themeToggle = document.getElementById("themeToggle");
+    themeToggle.onclick = () => {
+      const current = document.documentElement.getAttribute("data-theme") || "dark";
+      const next = current === "dark" ? "light" : "dark";
+      document.documentElement.setAttribute("data-theme", next);
+      themeToggle.textContent = next === "dark" ? "🌙" : "☀️";
+      localStorage.setItem("theme", next);
+    };
+
+    function loadTheme() {
+      const saved = localStorage.getItem("theme") || "dark";
+      document.documentElement.setAttribute("data-theme", saved);
+      themeToggle.textContent = saved === "dark" ? "🌙" : "☀️";
+    }
+
+    window.onload = () => {
+      loadTheme();
+    };
+  fetch("https://api.ipinfo.io/lite/8.8.8.8?token=830c15d7f63705")
+  .then(response => response.json())
+  .then(data => {
+    const [lat, lng] = data.loc.split(",");
+    
+    // Display location text
+    document.getElementById("location").textContent = 
+      `You are in ${data.city}, ${data.region}, ${data.country} (Lat: ${lat}, Lon: ${lng})`;
+
+    // Initialize Google Map
+    initMap(parseFloat(lat), parseFloat(lng));
+  });
+  </script>  
+<script src="https://www.google.com/recaptcha/api.js" async defer></script>
+  
+   <script>
+    function toggleTheme() {
+      const currentTheme = document.documentElement.getAttribute('data-theme');
+      const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', newTheme);
+    }
+
+    function initMap(lat = 0, lng = 0) {
+      const map = new google.maps.Map(document.getElementById("map"), {
+        center: { lat, lng },
+        zoom: 10,
+      });
+
+      new google.maps.Marker({
+        position: { lat, lng },
+        map,
+        title: "Your IP Location"
+      });
+    }
+
+    fetch("http://ip-api.com/json/")
+      .then(response => response.json())
+      .then(data => {
+        const { lat, lon } = data;
+        initMap(lat, lon);
+        document.getElementById("location").textContent = `You are in ${data.city}, ${data.regionName}, ${data.country} (Lat: ${lat}, Lon: ${lon})`;
+      });
+  document.getElementById("signup-form").addEventListener("submit", function (e) {
+  e.preventDefault();
+
+  const recaptchaResponse = grecaptcha.getResponse();
+  if (!recaptchaResponse) {
+    alert("Please complete the reCAPTCHA.");
+    return;
+  }
+
+  const email = document.getElementById("email").value;
+  const password = document.getElementById("password").value;
+
+  firebase.auth().createUserWithEmailAndPassword(email, password)
+    .then(userCredential => {
+      alert("Sign-up successful!");
+      grecaptcha.reset(); // Optional: reset captcha after success
+    })
+    .catch(error => {
+      alert(.message);
+    });
+    });
+  </script>  
+  <script async defer
+    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyD321K5MI-bM-F4AhtJdStExtg4QOJiUUM&callback=initMap"></script>
+</body>
+</html>
